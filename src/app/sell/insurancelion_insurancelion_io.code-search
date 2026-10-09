@@ -1,0 +1,14 @@
+# Query: insurancelion@insurancelion.io
+# ContextLines: 1
+
+2 results - 2 files
+
+src/app/api/edit-alert/route.js:
+  21              from: 'TrailerLion <notifications@trailerlion.com>',
+  22:             to: 'Trailerlion@trailerlion.com',
+  23              subject: '🚨 Trailer Edit Awaiting Approval',
+
+src/app/api/webhook/route.js:
+  77                      from: 'support@trailerlion.com', 
+  78:                     to: 'insurancelion@insurancelion.io', 
+  79                      subject: '🚨 New Paid Listing Awaiting Approval!',
