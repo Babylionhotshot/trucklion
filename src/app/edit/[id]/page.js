@@ -21,7 +21,7 @@ const BRAKE_TYPES = ['Air', 'Electric/Hydraulic', 'Drum', 'None/Other'];
 export default function EditPage() {
     const params = useParams();
     const router = useRouter();
-    const trailerId = params.id;
+    const TruckId = params.id;
 
     const [isFetching, setIsFetching] = useState(true);
     const [userId, setUserId] = useState(null);
@@ -55,7 +55,7 @@ export default function EditPage() {
     const [newImagePreviews, setNewImagePreviews] = useState([]);
 
     useEffect(() => {
-        const loadTrailerData = async () => {
+        const loadTruckData = async () => {
             try {
                 const { data: { user } } = await supabase.auth.getUser();
                 if (!user) {
@@ -64,51 +64,51 @@ export default function EditPage() {
                 }
                 setUserId(user.id);
 
-                const { data: trailer, error } = await supabase
-                    .from('trailers')
+                const { data: Truck, error } = await supabase
+                    .from('trucks')
                     .select('*')
-                    .eq('id', trailerId)
+                    .eq('id', TruckId)
                     .single();
 
                 if (error) throw error;
 
-                if (trailer.seller_id !== user.id) {
+                if (Truck.seller_id !== user.id) {
                     setFormError("You do not have permission to edit this listing.");
                     setIsFetching(false);
                     return;
                 }
 
                 // Store a copy of the exact original database row for comparison
-                setOriginalData(trailer);
+                setOriginalData(Truck);
 
                 setFormData({
-                    condition: trailer.condition || 'Used',
-                    category: trailer.category || CATEGORIES[0],
-                    length: trailer.length || '',
-                    gvwr: trailer.gvwr || '',
-                    suspension: trailer.suspension || SUSPENSIONS[0],
-                    axles: trailer.axles || AXLES[1],
-                    brake_type: trailer.brake_type || BRAKE_TYPES[0],
-                    price: trailer.price || '',
-                    city: trailer.city || '',
-                    state: trailer.state || '',
-                    seller_type: trailer.seller_type || SELLER_TYPES[0],
-                    seller_name: trailer.seller_name || '',
-                    seller_phone: trailer.seller_phone || '',
-                    seller_email: trailer.seller_email || ''
+                    condition: Truck.condition || 'Used',
+                    category: Truck.category || CATEGORIES[0],
+                    length: Truck.length || '',
+                    gvwr: Truck.gvwr || '',
+                    suspension: Truck.suspension || SUSPENSIONS[0],
+                    axles: Truck.axles || AXLES[1],
+                    brake_type: Truck.brake_type || BRAKE_TYPES[0],
+                    price: Truck.price || '',
+                    city: Truck.city || '',
+                    state: Truck.state || '',
+                    seller_type: Truck.seller_type || SELLER_TYPES[0],
+                    seller_name: Truck.seller_name || '',
+                    seller_phone: Truck.seller_phone || '',
+                    seller_email: Truck.seller_email || ''
                 });
                 
-                setKeptImages(trailer.images || []);
+                setKeptImages(Truck.images || []);
             } catch (err) {
-                console.error("Failed to load trailer:", err);
-                setFormError("Failed to load trailer data.");
+                console.error("Failed to load Truck:", err);
+                setFormError("Failed to load Truck data.");
             } finally {
                 setIsFetching(false);
             }
         };
 
-        loadTrailerData();
-    }, [trailerId, router]);
+        loadTruckData();
+    }, [TruckId, router]);
 
     const handleInputChange = (e) => {
         const { name, value } = e.target;
@@ -192,12 +192,12 @@ export default function EditPage() {
                 const filePath = `${userId}/${fileName}`; 
                 
                 const { error: uploadError } = await supabase.storage
-                    .from('trailer_images')
+                    .from('Truck_images')
                     .upload(filePath, file);
                     
                 if (!uploadError) {
                     const { data } = supabase.storage
-                        .from('trailer_images')
+                        .from('Truck_images')
                         .getPublicUrl(filePath);
                     uploadedUrls.push(data.publicUrl);
                 }
@@ -205,11 +205,11 @@ export default function EditPage() {
         }
 
         const finalImagesList = [...keptImages, ...uploadedUrls];
-        const sanitizedCategory = formData.category.replace(/\s*trailers?\s*$/i, '').trim();
+        const sanitizedCategory = formData.category.replace(/\s*Trucks?\s*$/i, '').trim();
 
         // 2. Update Database and revert to Pending Approval
         const { error: updateError } = await supabase
-            .from('trailers')
+            .from('trucks')
             .update({
                 condition: formData.condition,
                 category: sanitizedCategory,
@@ -228,10 +228,10 @@ export default function EditPage() {
                 images: finalImagesList,
                 is_approved: false 
             })
-            .eq('id', trailerId);
+            .eq('id', TruckId);
 
         if (updateError) {
-            setFormError("Error updating trailer: " + updateError.message);
+            setFormError("Error updating Truck: " + updateError.message);
             setIsLoading(false);
             return;
         }
@@ -268,7 +268,7 @@ export default function EditPage() {
             <div className="max-w-3xl mx-auto bg-white p-8 rounded-lg shadow-lg border-t-4 border-blue-600 animate-in fade-in duration-300">
                 <div className="flex justify-between items-center mb-6 pb-2 border-b">
                     <h2 className="text-2xl font-bold text-gray-900">
-                        <i className="fa-solid fa-pen-to-square mr-2 text-blue-600"></i>Edit Trailer Listing
+                        <i className="fa-solid fa-pen-to-square mr-2 text-blue-600"></i>Edit Truck Listing
                     </h2>
                     <button onClick={() => router.push('/dashboard')} className="text-gray-500 hover:text-gray-800 transition">Cancel</button>
                 </div>
@@ -286,7 +286,7 @@ export default function EditPage() {
 
                 <form onSubmit={handleSaveChanges} className="space-y-8">
                     <div>
-                        <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Trailer Details</h3>
+                        <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Truck Details</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Condition *</label>

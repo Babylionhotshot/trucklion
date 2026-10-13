@@ -18,12 +18,12 @@ export async function POST(req) {
 
         // 1. Send Alert Email to ADMIN
         await resend.emails.send({
-            from: 'TrailerLion <notifications@trailerlion.com>',
-            to: 'trailerlion@trailerlion.com',
-            subject: '🚨 Trailer Edit Awaiting Approval',
+            from: 'TruckLion <notifications@Trucklion.com>',
+            to: 'Trucklion@Trucklion.com',
+            subject: '🚨 Truck Edit Awaiting Approval',
             html: `<div style="font-family: sans-serif; padding: 20px; max-width: 600px; border: 1px solid #e5e7eb; border-radius: 8px;">
                     <h2 style="color: #dc2626; margin-top: 0;">Action Required: Approve Edit</h2>
-                    <p style="font-size: 16px; color: #374151;">A user has edited their trailer listing. It is currently hidden and pending your approval.</p>
+                    <p style="font-size: 16px; color: #374151;">A user has edited their Truck listing. It is currently hidden and pending your approval.</p>
                     
                     <h3 style="margin-top: 25px; margin-bottom: 5px; color: #111827;">What Changed:</h3>
                     ${changesHTML}
@@ -40,16 +40,16 @@ export async function POST(req) {
         // 2. Send Confirmation Email to CUSTOMER
         if (customerEmail) {
             await resend.emails.send({
-                from: 'TrailerLion <support@trailerlion.com>',
+                from: 'TruckLion <support@Trucklion.com>',
                 to: customerEmail,
-                subject: 'TrailerLion - Edit Received & Under Review',
+                subject: 'TruckLion - Edit Received & Under Review',
                 html: `<div style="font-family: sans-serif; padding: 20px;">
                         <h2 style="color: #dc2626;">Edit Submitted Successfully</h2>
-                        <p>We have received the changes to your trailer listing!</p>
+                        <p>We have received the changes to your Truck listing!</p>
                         <p>Our team is currently reviewing your edits. Your listing will temporarily be hidden from the public directory until it is approved.</p>
                         <p>We will notify you as soon as it goes live again.</p>
                         <br/>
-                        <p>Thank you for using TrailerLion!</p>
+                        <p>Thank you for using TruckLion!</p>
                        </div>`
             });
         }

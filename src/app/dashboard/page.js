@@ -33,23 +33,23 @@ export default function DashboardPage() {
             setUserEmail(user.email);
             setUserId(user.id); // Save the ID for Stripe checkout
             
-            const { data: trailers, error } = await supabase
-                .from('trailers')
+            const { data: Trucks, error } = await supabase
+                .from('trucks')
                 .select('*')
                 .eq('seller_id', user.id)
                 .order('created_at', { ascending: false });
             if (error) throw error;
-            setMyListings(trailers || []);
+            setMyListings(Trucks || []);
 
             const { data: savedData, error: savedError } = await supabase
-                .from('saved_trailers')
-                .select('*, trailers(*)')
+                .from('saved_trucks')
+                .select('*, Trucks(*)')
                 .eq('user_id', user.id);
                 
             if (!savedError && savedData) {
                 const formattedSaved = savedData
-                    .filter(item => item.trailers && !item.trailers.is_sold && !item.trailers.is_archived && item.trailers.is_approved)
-                    .map(item => item.trailers); 
+                    .filter(item => item.Trucks && !item.Trucks.is_sold && !item.Trucks.is_archived && item.Trucks.is_approved)
+                    .map(item => item.Trucks); 
                 setSavedListings(formattedSaved);
             }
 
@@ -71,13 +71,13 @@ export default function DashboardPage() {
         if (!userEmail) return;
 
         const channel = supabase
-            .channel('dashboard-trailers-changes')
+            .channel('dashboard-Trucks-changes')
             .on(
                 'postgres_changes',
                 {
                     event: 'UPDATE',
                     schema: 'public',
-                    table: 'trailers',
+                    table: 'trucks',
                 },
                 (payload) => {
                     console.log('REALTIME PAYLOAD RECEIVED:', payload); 
@@ -107,7 +107,7 @@ export default function DashboardPage() {
             const res = await fetch('/api/cancel-subscription', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ trailerId: id })
+                body: JSON.stringify({ TruckId: id })
             });
             if (!res.ok) throw new Error('Failed to cancel subscription.');
             await fetchDashboardData(); 
@@ -123,10 +123,10 @@ export default function DashboardPage() {
         setActionLoading(`archive-${id}`);
         setDashboardError('');
         const { error } = await supabase
-            .from('trailers')
+            .from('trucks')
             .update({ is_archived: true })
             .eq('id', id);
-        if (error) setDashboardError("Error archiving trailer: " + error.message);
+        if (error) setDashboardError("Error archiving Truck: " + error.message);
         else await fetchDashboardData();
         setActionLoading(null);
     };
@@ -137,20 +137,20 @@ export default function DashboardPage() {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
             const { error } = await supabase
-                .from('saved_trailers')
+                .from('saved_trucks')
                 .delete()
                 .eq('user_id', user.id)
-                .eq('trailer_id', id);
+                .eq('Truck_id', id);
                 
-            if (error) setDashboardError("Error removing saved trailer: " + error.message);
+            if (error) setDashboardError("Error removing saved Truck: " + error.message);
             else setSavedListings(prev => prev.filter(t => t.id !== id));
         }
         setActionLoading(null);
     };
 
-    // NEW: Handle Reposting an Archived Trailer
-    const handleRepost = async (trailer) => {
-        setActionLoading(`repost-${trailer.id}`);
+    // NEW: Handle Reposting an Archived Truck
+    const handleRepost = async (Truck) => {
+        setActionLoading(`repost-${Truck.id}`);
         setDashboardError('');
         
         try {
@@ -158,7 +158,7 @@ export default function DashboardPage() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
-                    trailerData: trailer, 
+                    TruckData: Truck, 
                     userId: userId 
                 })
             });
@@ -190,9 +190,9 @@ export default function DashboardPage() {
         <div className="min-h-screen bg-gray-50">
             <nav className="bg-gray-900 text-white p-4 shadow-lg">
                 <div className="max-w-7xl mx-auto flex justify-between items-center">
-                    <Link href="/" className="font-bold text-xl tracking-tight hover:text-gray-200">&larr; Return to TrailerLion</Link>
+                    <Link href="/" className="font-bold text-xl tracking-tight hover:text-gray-200">&larr; Return to TruckLion</Link>
                     <Link href="/sell" className="px-4 py-2 rounded-md text-sm font-medium bg-red-600 hover:bg-red-700 text-white shadow transition flex items-center">
-                        <i className="fa-solid fa-tag mr-2"></i>Post a Trailer
+                        <i className="fa-solid fa-tag mr-2"></i>Post a Truck
                     </Link>
                 </div>
             </nav>
@@ -217,20 +217,20 @@ export default function DashboardPage() {
                     <div className="px-6 py-4 border-b bg-gray-50 flex justify-between items-center">
                         <h2 className="font-bold text-lg text-gray-800">
                             <i className={`fa-solid ${activeTab === 'active' ? 'fa-list' : activeTab === 'saved' ? 'fa-bookmark' : 'fa-box-archive'} mr-2`}></i>
-                            {activeTab === 'active' ? 'My Listed Trailers' : activeTab === 'saved' ? 'My Saved Trailers' : 'Archived Trailers'}
+                            {activeTab === 'active' ? 'My Listed Trucks' : activeTab === 'saved' ? 'My Saved Trucks' : 'Archived Trucks'}
                         </h2>
                     </div>
 
                     {displayListings.length === 0 ? (
-                        <div className="p-10 text-center text-gray-500"><p>No {activeTab === 'active' ? 'active or sold' : activeTab === 'saved' ? 'saved' : 'archived'} trailers found.</p></div>
+                        <div className="p-10 text-center text-gray-500"><p>No {activeTab === 'active' ? 'active or sold' : activeTab === 'saved' ? 'saved' : 'archived'} Trucks found.</p></div>
                     ) : (
                         <div className="divide-y divide-gray-200">
                             {displayListings.map((listing) => (
                                 <div key={listing.id} className="p-6 flex flex-col sm:flex-row items-center justify-between gap-4 transition hover:bg-gray-50">
                                     
-                                    <Link href={`/?trailerId=${listing.id}&from=dashboard`} className="flex items-center gap-4 w-full sm:w-auto hover:opacity-80 transition cursor-pointer group">
+                                    <Link href={`/?TruckId=${listing.id}&from=dashboard`} className="flex items-center gap-4 w-full sm:w-auto hover:opacity-80 transition cursor-pointer group">
                                         {listing.images && listing.images.length > 0 ? (
-                                            <img src={listing.images[0]} alt="trailer" className="w-20 h-20 bg-gray-200 rounded object-cover flex-shrink-0" />
+                                            <img src={listing.images[0]} alt="Truck" className="w-20 h-20 bg-gray-200 rounded object-cover flex-shrink-0" />
                                         ) : (
                                             <div className="w-20 h-20 bg-gray-200 rounded flex items-center justify-center text-gray-400"><i className="fa-solid fa-image text-xl"></i></div>
                                         )}
@@ -259,7 +259,7 @@ export default function DashboardPage() {
                                             </button>
                                         ) : (
                                             <>
-                                                {/* NEW: Repost Button for Archived Trailers */}
+                                                {/* NEW: Repost Button for Archived Trucks */}
                                                 {listing.is_archived && (
                                                     <button 
                                                         onClick={() => handleRepost(listing)} 

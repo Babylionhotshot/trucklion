@@ -6,7 +6,7 @@ export async function POST(req) {
         const url = new URL(req.url);
         const secret = url.searchParams.get('secret');
         
-        if (secret !== 'trailerlion_secure_123') {
+        if (secret !== 'Trucklion_secure_123') {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
@@ -20,7 +20,7 @@ export async function POST(req) {
             // The exact trigger: It was NOT approved before, but it IS approved now
             if (!oldRecord.is_approved && newRecord.is_approved) {
                 const sellerEmail = newRecord.seller_email;
-                const category = newRecord.category || 'Trailer';
+                const category = newRecord.category || 'Truck';
 
                 if (sellerEmail) {
                     // Send the "You are Live" email to the customer
@@ -31,15 +31,15 @@ export async function POST(req) {
                             'Authorization': `Bearer ${process.env.RESEND_API_KEY}`
                         },
                         body: JSON.stringify({
-                            from: 'TrailerLion <notifications@trailerlion.com>',
+                            from: 'TruckLion <notifications@Trucklion.com>',
                             to: sellerEmail,
-                            subject: 'Your Trailer is Live on TrailerLion!',
+                            subject: 'Your Truck is Live on TruckLion!',
                             html: `
                             <div style="font-family: sans-serif; padding: 20px;">
                                 <h2 style="color: #16a34a;">Great News!</h2>
-                                <p>Your <strong>${category}</strong> trailer has been reviewed and approved by our team.</p>
+                                <p>Your <strong>${category}</strong> Truck has been reviewed and approved by our team.</p>
                                 <p>It is now officially live on the public directory for buyers to see!</p>
-                                <a href="https://trailerlion.com" style="display: inline-block; background-color: #dc2626; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; margin-top: 10px;">View Your Listing</a>
+                                <a href="https://Trucklion.com" style="display: inline-block; background-color: #dc2626; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; margin-top: 10px;">View Your Listing</a>
                             </div>
                             `
                         })

@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata = {
-  title: 'TrailerLion - Buy & Sell Trailers',
-  description: 'The premier directory for buying and selling trailers.',
+  title: 'TruckLion - Buy & Sell Trucks',
+  description: 'The premier directory for buying and selling trucks.',
 };
 
 export default function RootLayout({ children }) {

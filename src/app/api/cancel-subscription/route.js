@@ -12,48 +12,48 @@ const supabase = createClient(
 
 export async function POST(req) {
     try {
-        const { trailerId } = await req.json();
+        const { TruckId } = await req.json();
 
-        if (!trailerId) {
-            return NextResponse.json({ error: 'Trailer ID is required' }, { status: 400 });
+        if (!TruckId) {
+            return NextResponse.json({ error: 'Truck ID is required' }, { status: 400 });
         }
 
-        // 1. Find the trailer in the database to get its Stripe Subscription ID
-        const { data: trailer, error: fetchError } = await supabase
-            .from('trailers')
+        // 1. Find the Truck in the database to get its Stripe Subscription ID
+        const { data: Truck, error: fetchError } = await supabase
+            .from('trucks')
             .select('stripe_subscription_id, is_sold, seller_email')
-            .eq('id', trailerId)
+            .eq('id', TruckId)
             .single();
 
-        if (fetchError || !trailer) {
+        if (fetchError || !Truck) {
             console.error("Database fetch error:", fetchError);
-            return NextResponse.json({ error: 'Trailer not found' }, { status: 404 });
+            return NextResponse.json({ error: 'Truck not found' }, { status: 404 });
         }
 
-        if (trailer.is_sold) {
-            return NextResponse.json({ error: 'Trailer is already marked as sold' }, { status: 400 });
+        if (Truck.is_sold) {
+            return NextResponse.json({ error: 'Truck is already marked as sold' }, { status: 400 });
         }
 
         // 2. If it has an active Stripe subscription, cancel it immediately
-        if (trailer.stripe_subscription_id) {
+        if (Truck.stripe_subscription_id) {
             try {
-                await stripe.subscriptions.cancel(trailer.stripe_subscription_id);
-                console.log(`Successfully canceled Stripe subscription: ${trailer.stripe_subscription_id}`);
+                await stripe.subscriptions.cancel(Truck.stripe_subscription_id);
+                console.log(`Successfully canceled Stripe subscription: ${Truck.stripe_subscription_id}`);
             } catch (stripeError) {
                 console.error("Stripe cancellation error:", stripeError);
                 return NextResponse.json({ error: 'Failed to cancel billing with Stripe' }, { status: 500 });
             }
         }
 
-        // 3. Mark the trailer as sold in Supabase so it drops off the Browse page
+        // 3. Mark the Truck as sold in Supabase so it drops off the Browse page
         const { error: updateError } = await supabase
-            .from('trailers')
+            .from('trucks')
             .update({ is_sold: true })
-            .eq('id', trailerId);
+            .eq('id', TruckId);
 
         if (updateError) {
             console.error("Database update error:", updateError);
-            return NextResponse.json({ error: 'Failed to mark trailer as sold in database' }, { status: 500 });
+            return NextResponse.json({ error: 'Failed to mark Truck as sold in database' }, { status: 500 });
         }
 
        

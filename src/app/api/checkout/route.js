@@ -12,15 +12,15 @@ const supabase = createClient(
 
 export async function POST(req) {
     try {
-        const { trailerData, userId } = await req.json();
-        const origin = req.headers.get('origin') || 'https://www.trailerlion.com';
+        const { TruckData, userId } = await req.json();
+        const origin = req.headers.get('origin') || 'https://www.Trucklion.com';
 
         // 1. INSERT DATA INTO SUPABASE FIRST
-        // We create the trailer record as a 'draft' so it isn't live yet
-        const { data: trailerRecord, error: dbError } = await supabase
-            .from('trailers')
+        // We create the Truck record as a 'draft' so it isn't live yet
+        const { data: TruckRecord, error: dbError } = await supabase
+            .from('trucks')
             .insert([{
-                ...trailerData,
+                ...TruckData,
                 seller_id: userId,
                 is_approved: false, // Ensure it's hidden from the public
                 is_sold: false
@@ -30,7 +30,7 @@ export async function POST(req) {
 
         if (dbError) {
             console.error("Supabase Insert Error:", dbError);
-            throw new Error("Failed to save trailer to database");
+            throw new Error("Failed to save Truck to database");
         }
 
         // 2. CREATE STRIPE SESSION
@@ -40,7 +40,7 @@ export async function POST(req) {
             line_items: [{
                 price_data: {
                     currency: 'usd',
-                    product_data: { name: 'Trailer Listing Subscription' },
+                    product_data: { name: 'Truck Listing Subscription' },
                     unit_amount: 1900, // $19.00
                     recurring: { interval: 'month' },
                 },
@@ -50,7 +50,7 @@ export async function POST(req) {
             success_url: `${origin}/?success=true`,
             cancel_url: `${origin}/?canceled=true`,
             metadata: {
-                trailerId: trailerRecord.id, // Only passing the ID
+                TruckId: TruckRecord.id, // Only passing the ID
                 userId: userId
             },
         });
