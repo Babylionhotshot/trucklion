@@ -2,6 +2,13 @@ import React from 'react';
 import Image from 'next/image';
 
 export default function TruckCard({ Truck, onViewDetails }) {
+    // Determine badge color based on seller type
+    const getSellerBadgeColor = (type) => {
+        if (!type) return 'bg-gray-600';
+        if (type.toLowerCase().includes('private')) return 'bg-blue-600';
+        return 'bg-green-600'; // Default to green for Dealership/Dealer
+    };
+
     return (
         <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow border border-gray-100 flex flex-col">
             <div className="h-48 bg-gray-200 relative overflow-hidden cursor-pointer" onClick={() => onViewDetails(Truck)}>
@@ -18,6 +25,15 @@ export default function TruckCard({ Truck, onViewDetails }) {
                         />
                     )}
                 </div>
+                
+                {/* Seller Type Badge (Top Left) */}
+                {Truck.seller_type && (
+                    <div className={`absolute top-2 left-2 ${getSellerBadgeColor(Truck.seller_type)} text-white px-3 py-1 rounded-full text-xs font-bold shadow-md z-20 uppercase tracking-wider`}>
+                        {Truck.seller_type === 'Dealership' ? 'DEALER' : Truck.seller_type}
+                    </div>
+                )}
+
+                {/* Price Badge (Top Right) */}
                 <div className="absolute top-2 right-2 bg-red-600 text-white px-3 py-1 rounded-full text-sm font-bold shadow-md z-20">
                     ${Number(Truck.price).toLocaleString()}
                 </div>

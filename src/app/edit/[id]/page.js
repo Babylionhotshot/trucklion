@@ -10,13 +10,12 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// Form Dropdown Options (Updated to match main config)
-const CATEGORIES = ['Auto Hauler', 'Boat', 'Camper', 'Conestoga', 'Container', 'Deck Over', 'Dry Van', 'Dump', 'Enclosed', 'Flatbed', 'Gooseneck', 'Horse', 'Logging', 'Low-Boy', 'Pole', 'Refrigerated', 'RGN', 'Step Deck', 'Tanker', 'Utility'];
-const SUSPENSIONS = ['Air Ride', 'Spring'];
-const CONDITIONS = ['New', 'Used'];
+// Form Dropdown Options for Trucks
+const CONDITIONS = ['Used', 'New'];
 const SELLER_TYPES = ['Private Seller', 'Dealership'];
-const AXLES = ['1', '2', '3', '4+'];
-const BRAKE_TYPES = ['Air', 'Electric/Hydraulic', 'Drum', 'None/Other'];
+const TRANSMISSIONS = ['Automatic', 'Manual'];
+const CAB_TYPES = ['Day Cab', 'Sleeper', 'Crew Cab', 'Extended Cab', 'Regular Cab', 'Other'];
+const BED_TYPES = ['Flatbed', 'Service Body', 'Dump', 'Box', 'Pickup', 'Chassis', 'Other'];
 
 export default function EditPage() {
     const params = useParams();
@@ -30,18 +29,22 @@ export default function EditPage() {
     const [formError, setFormError] = useState('');
     const [imageError, setImageError] = useState('');
     
-    // NEW: We will store the original data here to compare later
+    // We will store the original data here to compare later
     const [originalData, setOriginalData] = useState(null);
 
     const [formData, setFormData] = useState({
-        condition: 'Used',
-        category: CATEGORIES[0],
-        length: '',
+        make: '',
+        model: '',
+        year: '',
+        condition: CONDITIONS[0],
+        mileage: '',
         gvwr: '',
-        suspension: SUSPENSIONS[0],
-        axles: AXLES[1], 
-        brake_type: BRAKE_TYPES[0], 
+        rear_axle_count: '',
+        transmission: TRANSMISSIONS[0],
+        cab_type: CAB_TYPES[0],
+        bed_type: BED_TYPES[0],
         price: '',
+        description: '',
         city: '',
         state: '',
         seller_type: SELLER_TYPES[0], 
@@ -82,14 +85,18 @@ export default function EditPage() {
                 setOriginalData(Truck);
 
                 setFormData({
-                    condition: Truck.condition || 'Used',
-                    category: Truck.category || CATEGORIES[0],
-                    length: Truck.length || '',
+                    make: Truck.make || '',
+                    model: Truck.model || '',
+                    year: Truck.year || '',
+                    condition: Truck.condition || CONDITIONS[0],
+                    mileage: Truck.mileage || '',
                     gvwr: Truck.gvwr || '',
-                    suspension: Truck.suspension || SUSPENSIONS[0],
-                    axles: Truck.axles || AXLES[1],
-                    brake_type: Truck.brake_type || BRAKE_TYPES[0],
+                    rear_axle_count: Truck.rear_axle_count || '',
+                    transmission: Truck.transmission || TRANSMISSIONS[0],
+                    cab_type: Truck.cab_type || CAB_TYPES[0],
+                    bed_type: Truck.bed_type || BED_TYPES[0],
                     price: Truck.price || '',
+                    description: Truck.description || '',
                     city: Truck.city || '',
                     state: Truck.state || '',
                     seller_type: Truck.seller_type || SELLER_TYPES[0],
@@ -151,12 +158,14 @@ export default function EditPage() {
         setIsLoading(true);
         setFormError('');
 
-        // --- NEW: CALCULATE EXACTLY WHAT CHANGED ---
+        // --- CALCULATE EXACTLY WHAT CHANGED ---
         let changedFields = [];
         const fieldLabels = {
-            condition: 'Condition', category: 'Category', length: 'Length', gvwr: 'GVWR',
-            suspension: 'Suspension', axles: 'Axles', brake_type: 'Brake Type', price: 'Price',
-            city: 'City', state: 'State', seller_type: 'Seller Type', seller_name: 'Seller Name',
+            make: 'Make', model: 'Model', year: 'Year', condition: 'Condition', 
+            mileage: 'Mileage', gvwr: 'GVWR', rear_axle_count: 'Rear Axles', 
+            transmission: 'Transmission', cab_type: 'Cab Type', bed_type: 'Bed Type', 
+            price: 'Price', description: 'Description', city: 'City', state: 'State', 
+            seller_type: 'Seller Type', seller_name: 'Seller Name',
             seller_phone: 'Phone', seller_email: 'Email'
         };
 
@@ -181,7 +190,6 @@ export default function EditPage() {
                 changedFields.push("No specific fields were changed.");
             }
         }
-        // ------------------------------------------
         
         // 1. Handle image uploads
         let uploadedUrls = [];
@@ -192,7 +200,7 @@ export default function EditPage() {
                 const filePath = `${userId}/${fileName}`; 
                 
                 const { error: uploadError } = await supabase.storage
-                    .from('Truck_images')
+                    .from('Truck_images') // Make sure this matches your Supabase storage bucket name
                     .upload(filePath, file);
                     
                 if (!uploadError) {
@@ -205,20 +213,23 @@ export default function EditPage() {
         }
 
         const finalImagesList = [...keptImages, ...uploadedUrls];
-        const sanitizedCategory = formData.category.replace(/\s*Trucks?\s*$/i, '').trim();
 
         // 2. Update Database and revert to Pending Approval
         const { error: updateError } = await supabase
             .from('trucks')
             .update({
+                make: formData.make,
+                model: formData.model,
+                year: formData.year ? parseInt(formData.year) : null,
                 condition: formData.condition,
-                category: sanitizedCategory,
-                length: formData.length,
-                gvwr: formData.gvwr,
-                suspension: formData.suspension,
-                axles: formData.axles,
-                brake_type: formData.brake_type,
+                mileage: formData.mileage ? parseInt(formData.mileage) : null,
+                gvwr: formData.gvwr ? parseInt(formData.gvwr) : null,
+                rear_axle_count: formData.rear_axle_count ? parseInt(formData.rear_axle_count) : null,
+                transmission: formData.transmission,
+                cab_type: formData.cab_type,
+                bed_type: formData.bed_type,
                 price: parseFloat(formData.price),
+                description: formData.description,
                 city: formData.city,
                 state: formData.state.toUpperCase(),
                 seller_type: formData.seller_type,
@@ -236,17 +247,17 @@ export default function EditPage() {
             return;
         }
 
-        // 3. Trigger Backend to send Admin & Customer Emails (Passing the Changes!)
+        // 3. Trigger Backend to send Admin & Customer Emails
         const { data: { user } } = await supabase.auth.getUser();
         
         await fetch('/api/edit-alert', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
-                category: sanitizedCategory, 
+                category: `${formData.year} ${formData.make} ${formData.model}`, 
                 price: formData.price, 
                 customerEmail: user?.email,
-                changedFields: changedFields // <-- Passing the changes to the backend!
+                changedFields: changedFields 
             })
         }).catch(e => console.error("Edit Alert Failed:", e));
 
@@ -257,7 +268,7 @@ export default function EditPage() {
     if (isFetching) {
         return (
             <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center">
-                <i className="fa-solid fa-circle-notch fa-spin text-4xl text-blue-600 mb-4"></i>
+                <i className="fa-solid fa-circle-notch fa-spin text-4xl text-red-600 mb-4"></i>
                 <p className="text-gray-500 font-medium">Loading listing data...</p>
             </div>
         );
@@ -265,10 +276,10 @@ export default function EditPage() {
 
     return (
         <div className="min-h-screen bg-gray-50 py-10 px-4">
-            <div className="max-w-3xl mx-auto bg-white p-8 rounded-lg shadow-lg border-t-4 border-blue-600 animate-in fade-in duration-300">
+            <div className="max-w-3xl mx-auto bg-white p-8 rounded-lg shadow-lg border-t-4 border-red-600 animate-in fade-in duration-300">
                 <div className="flex justify-between items-center mb-6 pb-2 border-b">
                     <h2 className="text-2xl font-bold text-gray-900">
-                        <i className="fa-solid fa-pen-to-square mr-2 text-blue-600"></i>Edit Truck Listing
+                        <i className="fa-solid fa-pen-to-square mr-2 text-red-600"></i>Edit Truck Listing
                     </h2>
                     <button onClick={() => router.push('/dashboard')} className="text-gray-500 hover:text-gray-800 transition">Cancel</button>
                 </div>
@@ -288,55 +299,70 @@ export default function EditPage() {
                     <div>
                         <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Truck Details</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Make *</label>
+                                <input type="text" name="make" required value={formData.make} onChange={handleInputChange} placeholder="e.g. Ford" className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-red-600 focus:border-red-600" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Model *</label>
+                                <input type="text" name="model" required value={formData.model} onChange={handleInputChange} placeholder="e.g. F-350" className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-red-600 focus:border-red-600" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Year *</label>
+                                <input type="number" name="year" required value={formData.year} onChange={handleInputChange} placeholder="YYYY" className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-red-600 focus:border-red-600" />
+                            </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Condition *</label>
-                                <select name="condition" required value={formData.condition} onChange={handleInputChange} className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-blue-600 focus:border-blue-600">
+                                <select name="condition" required value={formData.condition} onChange={handleInputChange} className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-red-600 focus:border-red-600">
                                     {CONDITIONS.map(c => <option key={c} value={c}>{c}</option>)}
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Category *</label>
-                                <select name="category" required value={formData.category} onChange={handleInputChange} className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-blue-600 focus:border-blue-600">
-                                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Mileage</label>
+                                <input type="number" name="mileage" value={formData.mileage} onChange={handleInputChange} placeholder="e.g. 150000" className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-red-600 focus:border-red-600" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">GVWR (lbs)</label>
+                                <input type="number" name="gvwr" value={formData.gvwr} onChange={handleInputChange} placeholder="e.g. 26000" className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-red-600 focus:border-red-600" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Rear Axles</label>
+                                <input type="number" name="rear_axle_count" value={formData.rear_axle_count} onChange={handleInputChange} placeholder="e.g. 2" className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-red-600 focus:border-red-600" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Transmission</label>
+                                <select name="transmission" value={formData.transmission} onChange={handleInputChange} className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-red-600 focus:border-red-600">
+                                    {TRANSMISSIONS.map(t => <option key={t} value={t}>{t}</option>)}
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Length *</label>
-                                <input type="text" name="length" required value={formData.length} onChange={handleInputChange} className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-blue-600 focus:border-blue-600" />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">GVWR (lbs) *</label>
-                                <input type="number" name="gvwr" required value={formData.gvwr} onChange={handleInputChange} className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-blue-600 focus:border-blue-600" />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Suspension Type *</label>
-                                <select name="suspension" required value={formData.suspension} onChange={handleInputChange} className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-blue-600 focus:border-blue-600">
-                                    {SUSPENSIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Cab Type</label>
+                                <select name="cab_type" value={formData.cab_type} onChange={handleInputChange} className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-red-600 focus:border-red-600">
+                                    {CAB_TYPES.map(c => <option key={c} value={c}>{c}</option>)}
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Number of Axles *</label>
-                                <select name="axles" required value={formData.axles} onChange={handleInputChange} className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-blue-600 focus:border-blue-600">
-                                    {AXLES.map(a => <option key={a} value={a}>{a}</option>)}
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Braking Type *</label>
-                                <select name="brake_type" required value={formData.brake_type} onChange={handleInputChange} className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-blue-600 focus:border-blue-600">
-                                    {BRAKE_TYPES.map(b => <option key={b} value={b}>{b}</option>)}
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Bed Type</label>
+                                <select name="bed_type" value={formData.bed_type} onChange={handleInputChange} className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-red-600 focus:border-red-600">
+                                    {BED_TYPES.map(b => <option key={b} value={b}>{b}</option>)}
                                 </select>
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Asking Price ($) *</label>
-                                <input type="number" name="price" required value={formData.price} onChange={handleInputChange} className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-blue-600 focus:border-blue-600" />
+                                <input type="number" name="price" required value={formData.price} onChange={handleInputChange} className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-red-600 focus:border-red-600" />
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                                <textarea name="description" rows="4" value={formData.description} onChange={handleInputChange} placeholder="Tell buyers more about the truck..." className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-red-600 focus:border-red-600"></textarea>
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">City *</label>
-                                <input type="text" name="city" required value={formData.city} onChange={handleInputChange} className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-blue-600 focus:border-blue-600" />
+                                <input type="text" name="city" required value={formData.city} onChange={handleInputChange} className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-red-600 focus:border-red-600" />
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">State (2 letters) *</label>
-                                <input type="text" name="state" required maxLength={2} value={formData.state} onChange={handleInputChange} className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-blue-600 focus:border-blue-600" />
+                                <input type="text" name="state" required maxLength={2} value={formData.state} onChange={handleInputChange} className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-red-600 focus:border-red-600" />
                             </div>
                         </div>
                     </div>
@@ -346,21 +372,21 @@ export default function EditPage() {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="md:col-span-2">
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Seller Type *</label>
-                                <select name="seller_type" required value={formData.seller_type} onChange={handleInputChange} className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-blue-600 focus:border-blue-600">
+                                <select name="seller_type" required value={formData.seller_type} onChange={handleInputChange} className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-red-600 focus:border-red-600">
                                     {SELLER_TYPES.map(s => <option key={s} value={s}>{s}</option>)}
                                 </select>
                             </div>
                             <div className="md:col-span-2">
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Your Name</label>
-                                <input type="text" name="seller_name" value={formData.seller_name} onChange={handleInputChange} className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-blue-600 focus:border-blue-600" />
+                                <input type="text" name="seller_name" value={formData.seller_name} onChange={handleInputChange} className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-red-600 focus:border-red-600" />
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
-                                <input type="tel" name="seller_phone" value={formData.seller_phone} onChange={handleInputChange} className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-blue-600 focus:border-blue-600" />
+                                <input type="tel" name="seller_phone" value={formData.seller_phone} onChange={handleInputChange} className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-red-600 focus:border-red-600" />
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
-                                <input type="email" name="seller_email" value={formData.seller_email} onChange={handleInputChange} className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-blue-600 focus:border-blue-600" />
+                                <input type="email" name="seller_email" value={formData.seller_email} onChange={handleInputChange} className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-red-600 focus:border-red-600" />
                             </div>
                         </div>
                     </div>
@@ -372,7 +398,7 @@ export default function EditPage() {
                             <div className="space-y-1 text-center">
                                 <i className="fa-solid fa-cloud-arrow-up text-3xl text-gray-400"></i>
                                 <div className="flex text-sm text-gray-600 justify-center">
-                                    <label htmlFor="edit-file-upload" className="relative cursor-pointer rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none">
+                                    <label htmlFor="edit-file-upload" className="relative cursor-pointer rounded-md font-medium text-red-600 hover:text-red-500 focus-within:outline-none">
                                         <span>Upload additional files</span>
                                     </label>
                                 </div>
@@ -392,9 +418,9 @@ export default function EditPage() {
                                     </div>
                                 ))}
                                 {newImagePreviews.map((img, idx) => (
-                                    <div key={`new-${idx}`} className="relative w-24 h-24 bg-blue-50 rounded-lg overflow-hidden border-2 border-blue-400 shadow-sm">
+                                    <div key={`new-${idx}`} className="relative w-24 h-24 bg-red-50 rounded-lg overflow-hidden border-2 border-red-400 shadow-sm">
                                         <img src={img} alt={`New Preview ${idx + 1}`} className="w-full h-full object-cover opacity-80" />
-                                        <span className="absolute bottom-0 left-0 right-0 bg-blue-600 text-white text-[10px] text-center py-0.5">NEW</span>
+                                        <span className="absolute bottom-0 left-0 right-0 bg-red-600 text-white text-[10px] text-center py-0.5">NEW</span>
                                         <button type="button" onClick={() => removeNewImage(idx)} className="absolute top-1 right-1 bg-white/90 hover:bg-red-600 hover:text-white text-gray-700 w-6 h-6 rounded-full flex items-center justify-center transition shadow">
                                             <i className="fa-solid fa-xmark text-xs"></i>
                                         </button>
@@ -408,7 +434,7 @@ export default function EditPage() {
                         <button type="button" onClick={() => router.push('/dashboard')} className="flex-1 bg-gray-200 text-gray-800 py-4 rounded-md font-bold hover:bg-gray-300 transition">
                             Cancel
                         </button>
-                        <button type="submit" disabled={isLoading} className="flex-1 bg-blue-600 text-white py-4 rounded-md font-bold text-lg hover:bg-blue-700 transition shadow-lg flex items-center justify-center">
+                        <button type="submit" disabled={isLoading} className="flex-1 bg-red-600 text-white py-4 rounded-md font-bold text-lg hover:bg-red-700 transition shadow-lg flex items-center justify-center">
                             {isLoading ? <><i className="fa-solid fa-circle-notch fa-spin mr-2"></i> Saving...</> : 'Save & Submit for Approval'}
                         </button>
                     </div>

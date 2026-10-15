@@ -363,6 +363,8 @@ export default function TruckLionApp() {
                         {currentView === 'browse' && (
                             <BrowseView 
                                 Trucks={Trucks} 
+                                setTrucks={setTrucks}
+                                fetchTrucks={fetchTrucks}
                                 onViewDetails={(Truck) => {
                                     setSelectedTruck(Truck);
                                     setBackNavSource('browse');
@@ -554,9 +556,30 @@ function MapAutoPan({ lat, lng, radius }) {
 // ---------------------------------------------------------
 // BROWSE VIEW
 // ---------------------------------------------------------
-function BrowseView({ Trucks, onViewDetails, isMobileMenuOpen, filters, setFilters, viewMode, setViewMode, availableMakes, availableModels, handleMakeChange, filterSellerType, setFilterSellerType, onLoadMore, hasMore }) {
+function BrowseView({ Trucks, setTrucks, fetchTrucks, onViewDetails, isMobileMenuOpen, filters, setFilters, viewMode, setViewMode, availableMakes, availableModels, handleMakeChange, filterSellerType, setFilterSellerType, onLoadMore, hasMore }) {
     const [showMobileFilters, setShowMobileFilters] = useState(false);
     const filterContainerRef = useRef(null);
+
+    // DYNAMIC MAP FETCHING LOGIC
+    const handleMapIdle = async (e) => {
+        if (!e.map) return;
+        const bounds = e.map.getBounds();
+        if (!bounds) return;
+
+        const ne = bounds.getNorthEast();
+        const sw = bounds.getSouthWest();
+
+        const { data, error } = await supabase.rpc('get_trucks_in_bounds', {
+            min_lat: sw.lat(),
+            max_lat: ne.lat(),
+            min_lng: sw.lng(),
+            max_lng: ne.lng(),
+        });
+
+        if (!error && data) {
+            setTrucks(data);
+        }
+    };
 
     // TRUCK FILTERING LOGIC
     const filteredTrucks = useMemo(() => {
@@ -655,7 +678,10 @@ function BrowseView({ Trucks, onViewDetails, isMobileMenuOpen, filters, setFilte
                             
                             <div className="bg-gray-200 p-1 rounded-lg flex text-sm font-bold shadow-inner">
                                 <button 
-                                    onClick={() => setViewMode('list')}
+                                    onClick={() => {
+                                        setViewMode('list');
+                                        fetchTrucks(0, false); // Restore the standard list query
+                                    }}
                                     className={`px-4 py-1.5 rounded-md transition flex items-center ${viewMode === 'list' ? 'bg-white text-gray-900 shadow' : 'text-gray-500 hover:text-gray-700'}`}
                                 >
                                     <i className="fa-solid fa-list mr-2"></i> List
@@ -686,6 +712,7 @@ function BrowseView({ Trucks, onViewDetails, isMobileMenuOpen, filters, setFilte
                                     defaultZoom={filters.lat && filters.lng ? 7 : 4}
                                     mapId="DEMO_MAP_ID"
                                     gestureHandling="greedy"
+                                    onIdle={handleMapIdle}
                                 >
                                     <MapAutoPan lat={filters.lat} lng={filters.lng} radius={filters.radius} />
 
@@ -695,7 +722,7 @@ function BrowseView({ Trucks, onViewDetails, isMobileMenuOpen, filters, setFilte
                                                 key={Truck.id} 
                                                 position={{ lat: Truck.lat, lng: Truck.lng }}
                                                 onClick={() => onViewDetails(Truck)}
-                                                title={`${Truck.year ? Truck.year + ' ' : ''}${Truck.make} ${Truck.model} - $${Number(Truck.price).toLocaleString()}`}
+                                                 title={`${Truck.year ? Truck.year + ' ' : ''}${Truck.make} ${Truck.model}\n$${Number(Truck.price).toLocaleString()}`}
                                                 className="z-0 hover:z-50"
                                             >
                                                 <div className="relative flex flex-col items-center cursor-pointer transition-transform duration-300 ease-out hover:scale-150 origin-bottom">
