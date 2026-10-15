@@ -4,8 +4,10 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
-import Autocomplete from 'react-google-autocomplete'; 
-import { APIProvider, Map, AdvancedMarker, Pin, useMap } from '@vis.gl/react-google-maps';
+import { APIProvider, Map, AdvancedMarker, useMap } from '@vis.gl/react-google-maps';
+import TruckCard from '@/components/TruckCard';
+import FilterSidebar from '@/components/FilterSidebar';
+import { AuthView, UpdatePasswordView } from '@/components/AuthViews';
 
 // Initialize Supabase
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -22,6 +24,11 @@ export default function TruckLionApp() {
     
     const [isInitializing, setIsInitializing] = useState(true);
     const [backNavSource, setBackNavSource] = useState('browse'); 
+    
+    // Pagination State
+    const [page, setPage] = useState(0);
+    const [hasMore, setHasMore] = useState(true);
+    const ITEMS_PER_PAGE = 20;
     
     // 1. Data State for Truck Makes/Models Dropdowns
     const [vehicleData, setVehicleData] = useState([]);
@@ -115,10 +122,22 @@ export default function TruckLionApp() {
 
     // Trigger a database fetch whenever the location or radius changes
     useEffect(() => {
-        fetchTrucks(); 
+        setPage(0); // Reset pagination when location changes
+        fetchTrucks(0, false); 
     }, [filters.radius, filters.lat, filters.lng]);
 
-    async function fetchTrucks() {
+    // Load More Function
+    const loadMoreTrucks = () => {
+        const nextPage = page + 1;
+        setPage(nextPage);
+        fetchTrucks(nextPage, true);
+    };
+
+    // fetchTrucks now uses pagination ranges
+    async function fetchTrucks(pageIndex = 0, isAppending = false) {
+        const from = pageIndex * ITEMS_PER_PAGE;
+        const to = from + ITEMS_PER_PAGE - 1;
+
         let query;
 
         // If they selected a radius AND we have coordinates, use PostGIS
@@ -127,7 +146,7 @@ export default function TruckLionApp() {
                 search_lat: filters.lat,
                 search_lng: filters.lng,
                 radius_miles: parseInt(filters.radius)
-            });
+            }).range(from, to);
         } else {
             // Standard fetch for Nationwide
             query = supabase
@@ -137,7 +156,7 @@ export default function TruckLionApp() {
                 .eq('is_archived', false)
                 .eq('is_approved', true) 
                 .order('id', { ascending: false })
-                .limit(50); 
+                .range(from, to); 
         }
 
         const { data, error } = await query;
@@ -145,9 +164,22 @@ export default function TruckLionApp() {
         if (error) {
             console.error("Error fetching trucks:", error);
         } else {
-            setTrucks(data || []);
+            // Append if loading more, overwrite if brand new search
+            if (isAppending) {
+                setTrucks(prev => [...prev, ...(data || [])]);
+            } else {
+                setTrucks(data || []);
+            }
+
+            // Hide the Load More button if we hit the end of the database
+            if (!data || data.length < ITEMS_PER_PAGE) {
+                setHasMore(false);
+            } else {
+                setHasMore(true);
+            }
             
-            if (typeof window !== 'undefined') {
+            // Only check URL params on initial load, not when appending
+            if (typeof window !== 'undefined' && !isAppending) {
                 const urlQuery = new URLSearchParams(window.location.search);
                 const TruckIdToLoad = urlQuery.get('TruckId');
                 const fromSource = urlQuery.get('from');
@@ -172,7 +204,6 @@ export default function TruckLionApp() {
         setIsMobileMenuOpen(false); 
     };
 
-    // NEW: Handle Contact Us Click
     const handleContactClick = () => {
         if (session) {
             setCurrentView('contact');
@@ -347,6 +378,8 @@ export default function TruckLionApp() {
                                 handleMakeChange={handleMakeChange}
                                 filterSellerType={filterSellerType}
                                 setFilterSellerType={setFilterSellerType}
+                                onLoadMore={loadMoreTrucks} 
+                                hasMore={hasMore}           
                             />
                         )}
                         
@@ -399,7 +432,6 @@ function ContactView({ session, onBack }) {
         setStatus('sending');
         
         try {
-            // We will build this API route in the next step!
             const res = await fetch('/api/contact', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -492,193 +524,6 @@ function ContactView({ session, onBack }) {
 }
 
 // ---------------------------------------------------------
-// AUTH VIEW 
-// ---------------------------------------------------------
-function AuthView({ initialMode = 'login', onModeChange }) {
-    const [loading, setLoading] = useState(false);
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [confirmPassword, setConfirmPassword] = useState('');
-    const [message, setMessage] = useState('');
-    const [isLogin, setIsLogin] = useState(initialMode === 'login');
-    const [isResetting, setIsResetting] = useState(false);
-
-    useEffect(() => {
-        setIsLogin(initialMode === 'login');
-    }, [initialMode]);
-
-    const toggleMode = () => {
-        const newMode = !isLogin;
-        setIsLogin(newMode);
-        if (onModeChange) onModeChange(newMode ? 'login' : 'register');
-        setMessage('');
-        setConfirmPassword(''); 
-        setPassword('');
-    };
-
-    const handleAuth = async (e) => {
-        e.preventDefault();
-        setLoading(true);
-        setMessage('');
-        
-        if (isResetting) {
-            const { error } = await supabase.auth.resetPasswordForEmail(email, {
-                redirectTo: `${window.location.origin}/`, 
-            });
-            if (error) {
-                setMessage(error.message);
-            } else {
-                setMessage('Check your email for the password reset link!');
-                setIsResetting(false);
-                setPassword('');
-            }
-        } else {
-            let error;
-            if (isLogin) {
-                const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-                error = signInError;
-            } else {
-                if (password !== confirmPassword) {
-                    setMessage("Passwords do not match. Please try again.");
-                    setLoading(false);
-                    return;
-                }
-                const { error: signUpError } = await supabase.auth.signUp({ email, password });
-                error = signUpError;
-                
-                // Tell the user to check their email instead of hanging on "Logging in"
-                if (!error) {
-                    setMessage('Success! Please check your email to verify your address and activate your free account.');
-                    setPassword('');
-                    setConfirmPassword('');
-                }
-            }
-
-            if (error) {
-                setMessage(error.message);
-            }
-        }
-        setLoading(false);
-    };
-
-    return (
-        <div className="max-w-md mx-auto bg-white p-8 rounded-lg shadow-lg border-t-4 border-red-600 mt-10">
-            <h2 className="text-2xl font-bold text-center mb-6">
-                {isResetting ? 'Reset Password' : (isLogin ? 'Sign In' : 'Create an Account')}
-            </h2>
-            <form onSubmit={handleAuth} className="space-y-4">
-                <div>
-                    <label className="block text-sm font-medium text-gray-700">Email</label>
-                    <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="mt-1 w-full border border-gray-300 rounded-md p-2 focus:ring-red-600 focus:border-red-600" />
-                </div>
-                
-                {!isResetting && (
-                    <>
-                        <div>
-                            <div className="flex justify-between items-center">
-                                <label className="block text-sm font-medium text-gray-700">Password</label>
-                                {isLogin && (
-                                    <button type="button" onClick={() => { setIsResetting(true); setMessage(''); }} className="text-xs text-red-600 hover:text-red-800 font-medium">
-                                        Forgot Password?
-                                    </button>
-                                )}
-                            </div>
-                            <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="mt-1 w-full border border-gray-300 rounded-md p-2 focus:ring-red-600 focus:border-red-600" />
-                        </div>
-
-                        {!isLogin && (
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700">Confirm Password</label>
-                                <input type="password" required value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="mt-1 w-full border border-gray-300 rounded-md p-2 focus:ring-red-600 focus:border-red-600" />
-                            </div>
-                        )}
-                    </>
-                )}
-                
-                <button type="submit" disabled={loading} className="w-full bg-red-600 text-white py-2 rounded-md font-bold hover:bg-red-700 disabled:opacity-50 transition">
-                    {loading ? 'Processing...' : (isResetting ? 'Send Reset Link' : (isLogin ? 'Sign In' : 'Register'))}
-                </button>
-            </form>
-            
-            {message && <p className={`mt-4 text-center text-sm font-medium ${message.includes('Success') ? 'text-green-600' : 'text-red-600'}`}>{message}</p>}
-            
-            <div className="mt-6 text-center border-t pt-4">
-                {isResetting ? (
-                    <button onClick={() => { setIsResetting(false); setMessage(''); }} className="text-sm text-gray-600 hover:text-red-600 font-medium">
-                        Remembered your password? Sign in here.
-                    </button>
-                ) : (
-                    <button onClick={toggleMode} className="text-sm text-gray-600 hover:text-red-600 font-medium">
-                        {isLogin ? "Don't have an account? Register here." : "Already have an account? Sign in."}
-                    </button>
-                )}
-            </div>
-        </div>
-    );
-}
-
-// ---------------------------------------------------------
-// UPDATE PASSWORD VIEW
-// ---------------------------------------------------------
-function UpdatePasswordView({ onSuccess }) {
-    const [newPassword, setNewPassword] = useState('');
-    const [confirmPassword, setConfirmPassword] = useState(''); 
-    const [loading, setLoading] = useState(false);
-    const [message, setMessage] = useState('');
-
-    const handleUpdate = async (e) => {
-        e.preventDefault();
-        setMessage('');
-
-        if (newPassword !== confirmPassword) {
-            setMessage('Error: Passwords do not match. Please try again.');
-            return;
-        }
-
-        setLoading(true);
-
-        const { error } = await supabase.auth.updateUser({ password: newPassword });
-
-        if (error) {
-            setMessage(error.message);
-            setLoading(false);
-        } else {
-            setMessage('Password updated successfully! Taking you to your dashboard...');
-            setTimeout(() => {
-                onSuccess();
-            }, 2000);
-        }
-    };
-
-    return (
-        <div className="max-w-md mx-auto bg-white p-8 rounded-lg shadow-lg border-t-4 border-red-600 mt-10">
-            <h2 className="text-2xl font-bold text-center mb-6">Create New Password</h2>
-            <form onSubmit={handleUpdate} className="space-y-4">
-                <div>
-                    <label className="block text-sm font-medium text-gray-700">New Password</label>
-                    <input type="password" required value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="mt-1 w-full border border-gray-300 rounded-md p-2 focus:ring-red-600 focus:border-red-600" />
-                </div>
-                
-                <div>
-                    <label className="block text-sm font-medium text-gray-700">Confirm New Password</label>
-                    <input type="password" required value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="mt-1 w-full border border-gray-300 rounded-md p-2 focus:ring-red-600 focus:border-red-600" />
-                </div>
-
-                <button type="submit" disabled={loading} className="w-full bg-red-600 text-white py-2 rounded-md font-bold hover:bg-red-700 disabled:opacity-50 transition">
-                    {loading ? 'Saving...' : 'Update Password'}
-                </button>
-            </form>
-            
-            {message && (
-                <p className={`mt-4 text-center text-sm font-medium ${message.includes('successfully') ? 'text-green-600' : 'text-red-600'}`}>
-                    {message}
-                </p>
-            )}
-        </div>
-    );
-}
-
-// ---------------------------------------------------------
 // MAP AUTO-PAN HELPER
 // ---------------------------------------------------------
 function MapAutoPan({ lat, lng, radius }) {
@@ -709,7 +554,7 @@ function MapAutoPan({ lat, lng, radius }) {
 // ---------------------------------------------------------
 // BROWSE VIEW
 // ---------------------------------------------------------
-function BrowseView({ Trucks, onViewDetails, isMobileMenuOpen, filters, setFilters, viewMode, setViewMode, availableMakes, availableModels, handleMakeChange, filterSellerType, setFilterSellerType }) {
+function BrowseView({ Trucks, onViewDetails, isMobileMenuOpen, filters, setFilters, viewMode, setViewMode, availableMakes, availableModels, handleMakeChange, filterSellerType, setFilterSellerType, onLoadMore, hasMore }) {
     const [showMobileFilters, setShowMobileFilters] = useState(false);
     const filterContainerRef = useRef(null);
 
@@ -786,330 +631,20 @@ function BrowseView({ Trucks, onViewDetails, isMobileMenuOpen, filters, setFilte
 
             <div className="flex flex-col md:flex-row gap-6 mt-4">
                 
-                <div className={`w-full md:w-1/4 md:sticky md:top-4 md:self-start ${showMobileFilters ? 'fixed top-[80px] left-0 w-full px-4 z-50 md:z-30 md:px-0' : 'hidden md:block z-30'}`}>
-                    <div ref={filterContainerRef} className="bg-white p-6 rounded-lg shadow-2xl md:shadow-md h-fit border-t-4 border-gray-900 max-h-[75vh] md:max-h-[85vh] overflow-y-auto">
-                        
-                        <div className="flex justify-between items-center border-b pb-2 mb-4">
-                            <h2 className="text-lg font-bold text-gray-800"><i className="fa-solid fa-filter mr-2"></i>Filter Results</h2>
-                            <button 
-                                onClick={() => setShowMobileFilters(false)}
-                                className="md:hidden bg-blue-600 text-white px-4 py-1.5 rounded-md hover:bg-blue-700 transition text-sm font-bold shadow-sm"
-                            >
-                                Search
-                            </button>
-                        </div>
-                        
-                        <div className="space-y-4">
-                            
-                            {/* Seller Type */}
-                            <div className="mb-4 pt-2">
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Seller Type</label>
-                                <select 
-                                    value={filterSellerType} 
-                                    onChange={(e) => setFilterSellerType(e.target.value)}
-                                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-red-600 focus:border-red-600 p-2 border"
-                                >
-                                    <option value="All Sellers">All Sellers</option>
-                                    <option value="Private Seller">Private Seller</option>
-                                    <option value="Dealership">Dealership</option>
-                                </select>
-                            </div>
-
-                            {/* Make & Model */}
-                            <div className="mb-4 pt-2">
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Make</label>
-                                <select 
-                                    value={filters.make} 
-                                    onChange={handleMakeChange}
-                                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-red-600 focus:border-red-600 p-2 border"
-                                >
-                                    <option value="">All Makes</option>
-                                    {availableMakes.map(make => (
-                                        <option key={make} value={make}>{make}</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div className="mb-4">
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Model</label>
-                                <select 
-                                    value={filters.model} 
-                                    onChange={(e) => updateFilter('model', e.target.value)}
-                                    disabled={!filters.make}
-                                    className={`w-full border-gray-300 rounded-md shadow-sm p-2 border ${!filters.make ? 'bg-gray-100 cursor-not-allowed opacity-60' : 'focus:ring-red-600 focus:border-red-600'}`}
-                                >
-                                    <option value="">All Models</option>
-                                    {availableModels.map(model => (
-                                        <option key={model} value={model}>{model}</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            {/* Condition */}
-                            <div className="mb-4">
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Condition</label>
-                                <select 
-                                    value={filters.condition} 
-                                    onChange={(e) => updateFilter('condition', e.target.value)}
-                                    className="w-full border-gray-300 rounded-md shadow-sm p-2 border focus:ring-red-600 focus:border-red-600"
-                                >
-                                    <option value="">Any Condition</option>
-                                    <option value="New">New</option>
-                                    <option value="Used">Used</option>
-                                </select>
-                            </div>
-
-                            {/* Year Range */}
-                            <div className="mb-4">
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Year Range</label>
-                                <div className="flex space-x-2">
-                                    <input 
-                                        type="number" min="1934" max="2028" placeholder="Min" 
-                                        value={filters.minYear} onChange={(e) => updateFilter('minYear', e.target.value)}
-                                        className="w-1/2 border-gray-300 rounded-md shadow-sm p-2 border focus:ring-red-600 focus:border-red-600"
-                                    />
-                                    <input 
-                                        type="number" min="1934" max="2028" placeholder="Max" 
-                                        value={filters.maxYear} onChange={(e) => updateFilter('maxYear', e.target.value)}
-                                        className="w-1/2 border-gray-300 rounded-md shadow-sm p-2 border focus:ring-red-600 focus:border-red-600"
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Price Range */}
-                            <div className="mb-4">
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Price Range</label>
-                                <div className="flex space-x-2">
-                                    <input 
-                                        type="number" placeholder="Min $" 
-                                        value={filters.minPrice} onChange={(e) => updateFilter('minPrice', e.target.value)}
-                                        className="w-1/2 border-gray-300 rounded-md shadow-sm p-2 border focus:ring-red-600 focus:border-red-600"
-                                    />
-                                    <input 
-                                        type="number" placeholder="Max $" 
-                                        value={filters.maxPrice} onChange={(e) => updateFilter('maxPrice', e.target.value)}
-                                        className="w-1/2 border-gray-300 rounded-md shadow-sm p-2 border focus:ring-red-600 focus:border-red-600"
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Mileage Range */}
-                            <div className="mb-4">
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Mileage Range</label>
-                                <div className="flex space-x-2">
-                                    <input 
-                                        type="number" placeholder="Min" 
-                                        value={filters.minMileage} onChange={(e) => updateFilter('minMileage', e.target.value)}
-                                        className="w-1/2 border-gray-300 rounded-md shadow-sm p-2 border focus:ring-red-600 focus:border-red-600"
-                                    />
-                                    <input 
-                                        type="number" placeholder="Max" 
-                                        value={filters.maxMileage} onChange={(e) => updateFilter('maxMileage', e.target.value)}
-                                        className="w-1/2 border-gray-300 rounded-md shadow-sm p-2 border focus:ring-red-600 focus:border-red-600"
-                                    />
-                                </div>
-                            </div>
-
-                            {/* GVWR Range */}
-                            <div className="mb-4">
-                                <label className="block text-sm font-medium text-gray-700 mb-1">GVWR (lbs)</label>
-                                <div className="flex space-x-2">
-                                    <input 
-                                        type="number" min="1000" placeholder="Min" 
-                                        value={filters.minGvwr} onChange={(e) => updateFilter('minGvwr', e.target.value)}
-                                        className="w-1/2 border-gray-300 rounded-md shadow-sm p-2 border focus:ring-red-600 focus:border-red-600"
-                                    />
-                                    <input 
-                                        type="number" min="1000" placeholder="Max" 
-                                        value={filters.maxGvwr} onChange={(e) => updateFilter('maxGvwr', e.target.value)}
-                                        className="w-1/2 border-gray-300 rounded-md shadow-sm p-2 border focus:ring-red-600 focus:border-red-600"
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Transmission */}
-                            <div className="mb-4">
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Transmission</label>
-                                <select 
-                                    value={filters.transmission} 
-                                    onChange={(e) => updateFilter('transmission', e.target.value)}
-                                    className="w-full border-gray-300 rounded-md shadow-sm p-2 border focus:ring-red-600 focus:border-red-600"
-                                >
-                                    <option value="">Any Transmission</option>
-                                    <option value="Automatic">Automatic</option>
-                                    <option value="Manual">Manual</option>
-                                    <option value="EV">EV</option>
-                                </select>
-                            </div>
-
-                            {/* Rear Axle Count */}
-                            <div className="mb-4">
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Rear Axle Count</label>
-                                <select 
-                                    value={filters.rearAxleCount} 
-                                    onChange={(e) => updateFilter('rearAxleCount', e.target.value)}
-                                    className="w-full border-gray-300 rounded-md shadow-sm p-2 border focus:ring-red-600 focus:border-red-600"
-                                >
-                                    <option value="">Any Axle Count</option>
-                                    <option value="1">1</option>
-                                    <option value="2">2</option>
-                                    <option value="3">3</option>
-                                    <option value="4">4</option>
-                                </select>
-                            </div>
-
-                            {/* Cab Type */}
-                            <div className="mb-4">
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Cab Type</label>
-                                <select 
-                                    value={filters.cabType} 
-                                    onChange={(e) => updateFilter('cabType', e.target.value)}
-                                    className="w-full border-gray-300 rounded-md shadow-sm p-2 border focus:ring-red-600 focus:border-red-600"
-                                >
-                                    <option value="">Any Cab Type</option>
-                                    <option value="(Semi Trucks) Sleeper Cab">(Semi Trucks) Sleeper Cab</option>
-                                    <option value="(Semi Trucks) Day Cab">(Semi Trucks) Day Cab</option>
-                                    <option value="(Chevy) Extended Cab (2 Full-Size Front Doors & 2 Half-Size Rear Doors)">(Chevy) Extended Cab (2 Full-Size Front Doors & 2 Half-Size Rear Doors)</option>
-                                    <option value="(Chevy) Crew Cab (4 Full-Size Door)">(Chevy) Crew Cab (4 Full-Size Door)</option>
-                                    <option value="(GM) Regular Cab (2 Doors Only)">(GM) Regular Cab (2 Doors Only)</option>
-                                    <option value="(GM) Extended Cab (2 Full-Size Front Doors & 2 Rear Suicided Doors)">(GM) Extended Cab (2 Full-Size Front Doors & 2 Rear Suicided Doors)</option>
-                                    <option value="(GM) Double Cab (2 Full-Size Front Doors & 2 Narrower Rear Doors)">(GM) Double Cab (2 Full-Size Front Doors & 2 Narrower Rear Doors)</option>
-                                    <option value="(GM) Crew Cab (4 Full-Size Doors)">(GM) Crew Cab (4 Full-Size Doors)</option>
-                                    <option value="(Ram) Regular Cab (2 Doors Only)">(Ram) Regular Cab (2 Doors Only)</option>
-                                    <option value="(Ram) Club Car (2 Full-Size Front Doors & 2 Suicided Rear Doors)">(Ram) Club Car (2 Full-Size Front Doors & 2 Suicided Rear Doors)</option>
-                                    <option value="(Ram) Quad Cab (2 Full-Size Front Doors & 2 Narrower Rear Doors)">(Ram) Quad Cab (2 Full-Size Front Doors & 2 Narrower Rear Doors)</option>
-                                    <option value="(Ram) Crew Cab (4 Full-Size Doors)">(Ram) Crew Cab (4 Full-Size Doors)</option>
-                                    <option value="(Ram) Mega Cab (4 Full-Size Doors w/ Extra Space)">(Ram) Mega Cab (4 Full-Size Doors w/ Extra Space)</option>
-                                    <option value="(Ford) Regular Cab (2 Doors Only)">(Ford) Regular Cab (2 Doors Only)</option>
-                                    <option value="(Ford) Extended Cab (2 Full-Size Front Doors & 2 Suicided Rear Doors)">(Ford) Extended Cab (2 Full-Size Front Doors & 2 Suicided Rear Doors)</option>
-                                    <option value="(Ford) Crew Cab (4 Full-Size Doors)">(Ford) Crew Cab (4 Full-Size Doors)</option>
-                                    <option value="(Nissan) Standard Cab (2 Doors Only)">(Nissan) Standard Cab (2 Doors Only)</option>
-                                    <option value="(Nissan) King Cab (2 Full-Size Doors & 2 Scuicided Doors)">(Nissan) King Cab (2 Full-Size Doors & 2 Scuicided Doors)</option>
-                                    <option value="(Nissan) Crew Cab (4 Full-Size Doors)">(Nissan) Crew Cab (4 Full-Size Doors)</option>
-                                    <option value="(Toyota) Regular Cab (2 Doors Only)">(Toyota) Regular Cab (2 Doors Only)</option>
-                                    <option value="(Toyota) Access Cab (2 Full-Size Front Doors & 2 Suicided Rear Doors)">(Toyota) Access Cab (2 Full-Size Front Doors & 2 Suicided Rear Doors)</option>
-                                    <option value="(Toyota) Double Cab (2 Full-Size Front Doors & 2 Narrower Rear Doors)">(Toyota) Double Cab (2 Full-Size Front Doors & 2 Narrower Rear Doors)</option>
-                                    <option value="(Toyota) Crewmax Cab (4 Full-Size Doors)">(Toyota) Crewmax Cab (4 Full-Size Doors)</option>
-                                </select>
-                            </div>
-
-                            {/* Bed Type */}
-                            <div className="mb-4">
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Bed Type</label>
-                                <select 
-                                    value={filters.bedType} 
-                                    onChange={(e) => updateFilter('bedType', e.target.value)}
-                                    className="w-full border-gray-300 rounded-md shadow-sm p-2 border focus:ring-red-600 focus:border-red-600"
-                                >
-                                    <option value="">Any Bed Type</option>
-                                    <option value="No Bed (Cab Chassi)">No Bed (Cab Chassi)</option>
-                                    <option value="Short Bed">Short Bed</option>
-                                    <option value="Standard Bed">Standard Bed</option>
-                                    <option value="Long Bed">Long Bed</option>
-                                    <option value="Flatbed">Flatbed</option>
-                                    <option value="Utility/Service Bed">Utility/Service Bed</option>
-                                    <option value="Hotshot Bed">Hotshot Bed</option>
-                                    <option value="Dump Bed">Dump Bed</option>
-                                    <option value="Tow Bed">Tow Bed</option>
-                                </select>
-                            </div>
-
-                            {/* 1. LOCATION SECTION (Moved to Bottom) */}
-                            <div className="space-y-4 bg-gray-50 p-3 rounded-lg border border-gray-200 mt-6">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">From Location</label>
-                                    
-                                    <button 
-                                        onClick={() => {
-                                            if (navigator.geolocation) {
-                                                navigator.geolocation.getCurrentPosition(
-                                                    (position) => {
-                                                        updateFilter('lat', position.coords.latitude);
-                                                        updateFilter('lng', position.coords.longitude);
-                                                        updateFilter('city', 'Current Location');
-                                                        updateFilter('state', '');
-                                                        if (filters.radius === 'Nationwide') updateFilter('radius', '500');
-                                                    },
-                                                    (error) => alert('Unable to retrieve your location. Please type a city manually.')
-                                                );
-                                            }
-                                        }}
-                                        className="w-full mb-3 bg-white border border-gray-300 text-gray-700 py-2 rounded-md hover:bg-gray-50 transition text-sm font-bold shadow-sm flex justify-center items-center gap-2"
-                                    >
-                                        <i className="fa-solid fa-location-crosshairs text-blue-600"></i> Use My Location
-                                    </button>
-
-                                    <div className="relative flex items-center justify-center my-3">
-                                        <span className="bg-gray-50 px-2 text-xs text-gray-400 font-medium z-10">OR SEARCH</span>
-                                        <div className="absolute w-full h-px bg-gray-300"></div>
-                                    </div>
-
-                                    <Autocomplete
-                                        apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}
-                                        onPlaceSelected={(place) => {
-                                            if (!place.geometry) return;
-                                            updateFilter('lat', place.geometry.location.lat());
-                                            updateFilter('lng', place.geometry.location.lng());
-                                            
-                                            let newCity = "";
-                                            let newState = "";
-                                            place.address_components.forEach((component) => {
-                                                if (component.types.includes("locality")) newCity = component.long_name;
-                                                if (component.types.includes("administrative_area_level_1")) newState = component.short_name; 
-                                            });
-                                            updateFilter('city', newCity);
-                                            updateFilter('state', newState);
-                                            if (filters.radius === 'Nationwide') updateFilter('radius', '500');
-                                        }}
-                                        options={{ types: ["(cities)"], componentRestrictions: { country: "us" } }}
-                                        className="w-full border border-gray-300 rounded-md p-2 focus:ring-red-600 focus:border-red-600 text-sm"
-                                        placeholder="Type a city... (e.g. Dallas, TX)"
-                                    />
-                                    
-                                    {filters.city && (
-                                        <p className="mt-2 text-xs text-green-600 font-bold">
-                                            <i className="fa-solid fa-check-circle mr-1"></i> 
-                                            Searching near: {filters.city} {filters.state && `, ${filters.state}`}
-                                        </p>
-                                    )}
-                                </div>
-
-                                {/* 2. DISTANCE SECTION */}
-                                <div className="pt-3 border-t border-gray-200">
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Search Distance</label>
-                                    <select 
-                                        className="w-full border border-gray-300 rounded-md p-2 focus:ring-red-600 focus:border-red-600 font-medium" 
-                                        value={filters.radius} 
-                                        onChange={(e) => updateFilter('radius', e.target.value)}
-                                    >
-                                        <option value="Nationwide">Nationwide</option>
-                                        <option value="50">Within 50 Miles</option>
-                                        <option value="100">Within 100 Miles</option>
-                                        <option value="250">Within 250 Miles</option>
-                                        <option value="500">Within 500 Miles</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-3 mt-6">
-                                <button 
-                                    onClick={handleClearFilters} 
-                                    className="w-full bg-gray-200 text-gray-800 py-3 rounded-md hover:bg-gray-300 transition text-sm font-bold"
-                                >
-                                    Clear Filters
-                                </button>
-                                
-                                <button 
-                                    onClick={() => setShowMobileFilters(false)}
-                                    className="w-full bg-blue-600 text-white py-3 rounded-md hover:bg-blue-700 transition text-sm font-bold shadow-md"
-                                >
-                                    Search
-                                </button>
-                            </div>
-
-                        </div>
-                    </div>
-                </div>
+                {/* The Filter Sidebar Component that we just extracted */}
+                <FilterSidebar 
+                    showMobileFilters={showMobileFilters}
+                    setShowMobileFilters={setShowMobileFilters}
+                    filterContainerRef={filterContainerRef}
+                    filterSellerType={filterSellerType}
+                    setFilterSellerType={setFilterSellerType}
+                    filters={filters}
+                    updateFilter={updateFilter}
+                    handleMakeChange={handleMakeChange}
+                    availableMakes={availableMakes}
+                    availableModels={availableModels}
+                    handleClearFilters={handleClearFilters}
+                />
 
                 {/* --- TRUCK GRID / MAP --- */}
                 <div className="w-full md:w-3/4">
@@ -1180,40 +715,28 @@ function BrowseView({ Trucks, onViewDetails, isMobileMenuOpen, filters, setFilte
                             </APIProvider>
                         </div>
                     ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 animate-in fade-in duration-300">
-                            {filteredTrucks.map(Truck => (
-                                <div key={Truck.id} className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow border border-gray-100 flex flex-col">
-                                    <div className="h-48 bg-gray-200 relative overflow-hidden cursor-pointer" onClick={() => onViewDetails(Truck)}>
-                                        <div className="absolute inset-0 bg-gray-800 flex items-center justify-center">
-                                            <i className="fa-solid fa-image text-4xl text-gray-600"></i>
-                                            {Truck.images && Truck.images.length > 0 && (
-                                                <img src={Truck.images[0]} alt={Truck.make} loading="lazy" className="absolute inset-0 w-full h-full object-cover opacity-80 hover:opacity-100 transition-opacity" />
-                                            )}
-                                        </div>
-                                        <div className="absolute top-2 right-2 bg-red-600 text-white px-3 py-1 rounded-full text-sm font-bold shadow-md">
-                                            ${Number(Truck.price).toLocaleString()}
-                                        </div>
-                                    </div>
-                                    <div className="p-5 flex-grow flex flex-col">
-                                        <div className={`text-xs font-bold uppercase tracking-wider mb-1 text-red-600`}>
-                                             {Truck.make}
-                                        </div>
-                                        <h3 className="text-lg font-bold text-gray-900 mb-2">
-                                            {Truck.year ? `${Truck.year} ` : ''}{Truck.model}
-                                        </h3>
-                                        
-                                        <div className="text-sm text-gray-600 space-y-1 mb-4 flex-grow">
-                                            <p><i className="fa-solid fa-gauge w-5 text-gray-400"></i> {Truck.mileage ? Number(Truck.mileage).toLocaleString() + ' miles' : 'Mileage not listed'}</p>
-                                            <p><i className="fa-solid fa-location-dot w-5 text-gray-400"></i> {Truck.city}, {Truck.state}</p>
-                                        </div>
-                                        
-                                        <button onClick={() => onViewDetails(Truck)} className="w-full bg-gray-900 hover:bg-gray-800 text-white py-2 rounded font-medium transition mt-auto">
-                                            View Details
-                                        </button>
-                                    </div>
+                        <>
+                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 animate-in fade-in duration-300">
+                                {filteredTrucks.map(Truck => (
+                                    <TruckCard 
+                                        key={Truck.id} 
+                                        Truck={Truck} 
+                                        onViewDetails={onViewDetails} 
+                                    />
+                                ))}
+                            </div>
+                            
+                            {hasMore && (
+                                <div className="flex justify-center mt-10 mb-4">
+                                    <button 
+                                        onClick={onLoadMore} 
+                                        className="bg-white border-2 border-gray-200 text-gray-800 px-8 py-3 rounded-md hover:bg-gray-50 hover:border-gray-300 font-bold shadow-sm transition"
+                                    >
+                                        Load More Trucks
+                                    </button>
                                 </div>
-                            ))}
-                        </div>
+                            )}
+                        </>
                     )}
                 </div>
             </div>
