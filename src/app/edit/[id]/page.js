@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
+import Autocomplete from 'react-google-autocomplete'; 
 
 // Initialize Supabase
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -47,6 +48,8 @@ export default function EditPage() {
         description: '',
         city: '',
         state: '',
+        lat: null, 
+        lng: null, 
         seller_type: SELLER_TYPES[0], 
         seller_name: '',
         seller_phone: '',
@@ -99,6 +102,8 @@ export default function EditPage() {
                     description: Truck.description || '',
                     city: Truck.city || '',
                     state: Truck.state || '',
+                    lat: Truck.lat || null,
+                    lng: Truck.lng || null,
                     seller_type: Truck.seller_type || SELLER_TYPES[0],
                     seller_name: Truck.seller_name || '',
                     seller_phone: Truck.seller_phone || '',
@@ -120,6 +125,33 @@ export default function EditPage() {
     const handleInputChange = (e) => {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    // Auto-extract city, state, and coordinates from Google Maps response
+    const handlePlaceSelected = (place) => {
+        if (!place.address_components || !place.geometry) return;
+        
+        let city = '';
+        let state = '';
+        const lat = place.geometry.location.lat();
+        const lng = place.geometry.location.lng();
+
+        for (const component of place.address_components) {
+            const types = component.types;
+            if (types.includes('locality')) {
+                city = component.long_name;
+            } else if (types.includes('administrative_area_level_1')) {
+                state = component.short_name; // Gets the 2-letter state code
+            }
+        }
+
+        setFormData(prev => ({
+            ...prev,
+            city,
+            state,
+            lat,
+            lng
+        }));
     };
 
     const handleImageUpload = (e) => {
@@ -148,9 +180,25 @@ export default function EditPage() {
     const handleSaveChanges = async (e) => {
         e.preventDefault();
         
+        // Validation: Must have at least one photo
+        if (keptImages.length === 0 && newImageFiles.length === 0) {
+            window.alert("Action Required: Please provide at least one photo of your truck.");
+            setFormError("Please provide at least one photo of your truck.");
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            return;
+        }
+
+        // Validation: Contact Info
         if (!formData.seller_phone && !formData.seller_email) {
             window.alert("Action Required: Please provide at least a phone number or an email address so buyers can reach you.");
             setFormError("Please provide either a Phone Number or an Email Address.");
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            return;
+        }
+
+        // Validation: Location
+        if (!formData.city || !formData.state || !formData.lat || !formData.lng) {
+            setFormError("Please select a valid City and State from the location dropdown.");
             window.scrollTo({ top: 0, behavior: 'smooth' });
             return;
         }
@@ -171,6 +219,8 @@ export default function EditPage() {
 
         if (originalData) {
             for (const key in formData) {
+                if (key === 'lat' || key === 'lng') continue; 
+
                 let oldVal = String(originalData[key] || '').trim();
                 let newVal = String(formData[key] || '').trim();
                 
@@ -200,7 +250,7 @@ export default function EditPage() {
                 const filePath = `${userId}/${fileName}`; 
                 
                 const { error: uploadError } = await supabase.storage
-                    .from('Truck_images') // Make sure this matches your Supabase storage bucket name
+                    .from('Truck_images') 
                     .upload(filePath, file);
                     
                 if (!uploadError) {
@@ -232,6 +282,8 @@ export default function EditPage() {
                 description: formData.description,
                 city: formData.city,
                 state: formData.state.toUpperCase(),
+                lat: formData.lat, 
+                lng: formData.lng, 
                 seller_type: formData.seller_type,
                 seller_name: formData.seller_name,
                 seller_phone: formData.seller_phone,
@@ -296,10 +348,60 @@ export default function EditPage() {
                 )}
 
                 <form onSubmit={handleSaveChanges} className="space-y-8">
+                    
+                    {/* PHOTOS SECTION MOVED TO TOP */}
+                    <div>
+                        <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Photos *</h3>
+                        
+                        <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md relative hover:bg-gray-50 transition cursor-pointer">
+                            <div className="space-y-1 text-center">
+                                <i className="fa-solid fa-cloud-arrow-up text-3xl text-gray-400"></i>
+                                <div className="flex text-sm text-gray-600 justify-center">
+                                    <label htmlFor="edit-file-upload" className="relative cursor-pointer rounded-md font-medium text-red-600 hover:text-red-500 focus-within:outline-none">
+                                        <span>Upload additional files</span>
+                                    </label>
+                                </div>
+                                <p className="text-xs text-gray-500 mt-2">At least one photo is required.</p>
+                            </div>
+                            <input id="edit-file-upload" type="file" multiple accept="image/*" onChange={handleImageUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" title="Upload Photos" />
+                        </div>
+                        {imageError && <p className="text-red-600 text-sm mt-2 font-medium">{imageError}</p>}
+                        
+                        {(keptImages.length > 0 || newImagePreviews.length > 0) && (
+                            <div className="flex flex-wrap gap-4 mt-4">
+                                {keptImages.map((img, idx) => (
+                                    <div key={`kept-${idx}`} className="relative w-24 h-24 bg-gray-100 rounded-lg overflow-hidden border border-gray-200 shadow-sm">
+                                        <img src={img} alt={`Existing ${idx + 1}`} className="w-full h-full object-cover" />
+                                        <button type="button" onClick={() => removeKeptImage(idx)} className="absolute top-1 right-1 bg-white/90 hover:bg-red-600 hover:text-white text-gray-700 w-6 h-6 rounded-full flex items-center justify-center transition shadow">
+                                            <i className="fa-solid fa-xmark text-xs"></i>
+                                        </button>
+                                    </div>
+                                ))}
+                                {newImagePreviews.map((img, idx) => (
+                                    <div key={`new-${idx}`} className="relative w-24 h-24 bg-red-50 rounded-lg overflow-hidden border-2 border-red-400 shadow-sm">
+                                        <img src={img} alt={`New Preview ${idx + 1}`} className="w-full h-full object-cover opacity-80" />
+                                        <span className="absolute bottom-0 left-0 right-0 bg-red-600 text-white text-[10px] text-center py-0.5">NEW</span>
+                                        <button type="button" onClick={() => removeNewImage(idx)} className="absolute top-1 right-1 bg-white/90 hover:bg-red-600 hover:text-white text-gray-700 w-6 h-6 rounded-full flex items-center justify-center transition shadow">
+                                            <i className="fa-solid fa-xmark text-xs"></i>
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
                     <div>
                         <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Truck Details</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             
+                            {/* SELLER TYPE MOVED TO TRUCK DETAILS */}
+                            <div className="md:col-span-2">
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Seller Type *</label>
+                                <select name="seller_type" required value={formData.seller_type} onChange={handleInputChange} className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-red-600 focus:border-red-600">
+                                    {SELLER_TYPES.map(s => <option key={s} value={s}>{s}</option>)}
+                                </select>
+                            </div>
+
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Make *</label>
                                 <input type="text" name="make" required value={formData.make} onChange={handleInputChange} placeholder="e.g. Ford" className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-red-600 focus:border-red-600" />
@@ -356,13 +458,25 @@ export default function EditPage() {
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
                                 <textarea name="description" rows="4" value={formData.description} onChange={handleInputChange} placeholder="Tell buyers more about the truck..." className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-red-600 focus:border-red-600"></textarea>
                             </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">City *</label>
-                                <input type="text" name="city" required value={formData.city} onChange={handleInputChange} className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-red-600 focus:border-red-600" />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">State (2 letters) *</label>
-                                <input type="text" name="state" required maxLength={2} value={formData.state} onChange={handleInputChange} className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-red-600 focus:border-red-600" />
+                            
+                            <div className="md:col-span-2">
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Location (City, State) *</label>
+                                <Autocomplete
+                                    apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}
+                                    onPlaceSelected={handlePlaceSelected}
+                                    options={{
+                                        types: ['(cities)'],
+                                        componentRestrictions: { country: 'us' },
+                                    }}
+                                    defaultValue={formData.city && formData.state ? `${formData.city}, ${formData.state}` : ''}
+                                    className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-red-600 focus:border-red-600"
+                                    placeholder="Start typing a city..."
+                                />
+                                {formData.city && formData.state && (
+                                    <p className="text-sm text-green-600 mt-2 font-medium">
+                                        <i className="fa-solid fa-check-circle mr-1"></i> Verified Location: {formData.city}, {formData.state}
+                                    </p>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -370,12 +484,9 @@ export default function EditPage() {
                     <div>
                         <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Seller Contact Info</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div className="md:col-span-2">
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Seller Type *</label>
-                                <select name="seller_type" required value={formData.seller_type} onChange={handleInputChange} className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-red-600 focus:border-red-600">
-                                    {SELLER_TYPES.map(s => <option key={s} value={s}>{s}</option>)}
-                                </select>
-                            </div>
+                            
+                            {/* Seller Type was removed from here and moved above */}
+
                             <div className="md:col-span-2">
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Your Name</label>
                                 <input type="text" name="seller_name" value={formData.seller_name} onChange={handleInputChange} className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-red-600 focus:border-red-600" />
@@ -389,45 +500,6 @@ export default function EditPage() {
                                 <input type="email" name="seller_email" value={formData.seller_email} onChange={handleInputChange} className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-red-600 focus:border-red-600" />
                             </div>
                         </div>
-                    </div>
-
-                    <div>
-                        <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Photos</h3>
-                        
-                        <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md relative hover:bg-gray-50 transition cursor-pointer">
-                            <div className="space-y-1 text-center">
-                                <i className="fa-solid fa-cloud-arrow-up text-3xl text-gray-400"></i>
-                                <div className="flex text-sm text-gray-600 justify-center">
-                                    <label htmlFor="edit-file-upload" className="relative cursor-pointer rounded-md font-medium text-red-600 hover:text-red-500 focus-within:outline-none">
-                                        <span>Upload additional files</span>
-                                    </label>
-                                </div>
-                            </div>
-                            <input id="edit-file-upload" type="file" multiple accept="image/*" onChange={handleImageUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" title="Upload Photos" />
-                        </div>
-                        {imageError && <p className="text-red-600 text-sm mt-2 font-medium">{imageError}</p>}
-                        
-                        {(keptImages.length > 0 || newImagePreviews.length > 0) && (
-                            <div className="flex flex-wrap gap-4 mt-4">
-                                {keptImages.map((img, idx) => (
-                                    <div key={`kept-${idx}`} className="relative w-24 h-24 bg-gray-100 rounded-lg overflow-hidden border border-gray-200 shadow-sm">
-                                        <img src={img} alt={`Existing ${idx + 1}`} className="w-full h-full object-cover" />
-                                        <button type="button" onClick={() => removeKeptImage(idx)} className="absolute top-1 right-1 bg-white/90 hover:bg-red-600 hover:text-white text-gray-700 w-6 h-6 rounded-full flex items-center justify-center transition shadow">
-                                            <i className="fa-solid fa-xmark text-xs"></i>
-                                        </button>
-                                    </div>
-                                ))}
-                                {newImagePreviews.map((img, idx) => (
-                                    <div key={`new-${idx}`} className="relative w-24 h-24 bg-red-50 rounded-lg overflow-hidden border-2 border-red-400 shadow-sm">
-                                        <img src={img} alt={`New Preview ${idx + 1}`} className="w-full h-full object-cover opacity-80" />
-                                        <span className="absolute bottom-0 left-0 right-0 bg-red-600 text-white text-[10px] text-center py-0.5">NEW</span>
-                                        <button type="button" onClick={() => removeNewImage(idx)} className="absolute top-1 right-1 bg-white/90 hover:bg-red-600 hover:text-white text-gray-700 w-6 h-6 rounded-full flex items-center justify-center transition shadow">
-                                            <i className="fa-solid fa-xmark text-xs"></i>
-                                        </button>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
                     </div>
 
                     <div className="pt-6 border-t flex gap-4">
