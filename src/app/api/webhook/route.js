@@ -102,7 +102,10 @@ export async function POST(req) {
             // Update database and fetch info for the email
             const { data: truck, error } = await supabase
                 .from('trucks')
-                .update({ is_sold: true })
+                .update({ 
+                    is_sold: true,
+                    is_archived: true 
+                })
                 .eq('stripe_subscription_id', subscriptionId)
                 .select('seller_email, make, model, year')
                 .single();
