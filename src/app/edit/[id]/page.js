@@ -349,7 +349,7 @@ export default function EditPage() {
 
                 <form onSubmit={handleSaveChanges} className="space-y-8">
                     
-                    {/* PHOTOS SECTION MOVED TO TOP */}
+                    {/* PHOTOS SECTION */}
                     <div>
                         <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Photos *</h3>
                         
@@ -393,14 +393,6 @@ export default function EditPage() {
                     <div>
                         <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Truck Details</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            
-                            {/* SELLER TYPE MOVED TO TRUCK DETAILS */}
-                            <div className="md:col-span-2">
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Seller Type *</label>
-                                <select name="seller_type" required value={formData.seller_type} onChange={handleInputChange} className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-red-600 focus:border-red-600">
-                                    {SELLER_TYPES.map(s => <option key={s} value={s}>{s}</option>)}
-                                </select>
-                            </div>
 
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Make *</label>
@@ -454,6 +446,15 @@ export default function EditPage() {
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Asking Price ($) *</label>
                                 <input type="number" name="price" required value={formData.price} onChange={handleInputChange} className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-red-600 focus:border-red-600" />
                             </div>
+                            
+                            {/* SELLER TYPE MOVED TO BOTTOM OF GRID NEXT TO PRICE */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Seller Type *</label>
+                                <select name="seller_type" required value={formData.seller_type} onChange={handleInputChange} className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-red-600 focus:border-red-600">
+                                    {SELLER_TYPES.map(s => <option key={s} value={s}>{s}</option>)}
+                                </select>
+                            </div>
+
                             <div className="md:col-span-2">
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
                                 <textarea name="description" rows="4" value={formData.description} onChange={handleInputChange} placeholder="Tell buyers more about the truck..." className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-red-600 focus:border-red-600"></textarea>
@@ -485,8 +486,6 @@ export default function EditPage() {
                         <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Seller Contact Info</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             
-                            {/* Seller Type was removed from here and moved above */}
-
                             <div className="md:col-span-2">
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Your Name</label>
                                 <input type="text" name="seller_name" value={formData.seller_name} onChange={handleInputChange} className="w-full border border-gray-300 rounded-md p-3 text-gray-900 focus:ring-red-600 focus:border-red-600" />
